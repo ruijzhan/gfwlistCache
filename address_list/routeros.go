@@ -20,7 +20,7 @@ var (
 type AddressList interface {
 	Synced() bool
 	Has(string) bool
-	Add(string) error
+	Add(string, string) error
 	Stop()
 }
 
@@ -103,8 +103,8 @@ func (l *addressList) Has(domain string) bool {
 	return l.cached[domain]
 }
 
-func (l *addressList) Add(domain string) error {
-	err := addresslist.Add(l.cli, cacheName, domain, routeros.MAX_TIMEOUT, "")
+func (l *addressList) Add(domain, timeout string) error {
+	err := addresslist.Add(l.cli, cacheName, domain, timeout, "")
 	l.mtx.Lock()
 	defer l.mtx.Unlock()
 	if err == nil {

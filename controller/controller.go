@@ -74,7 +74,7 @@ func (gc *GFWCache) worker() bool {
 		return false
 	}
 	domain := obj.(string)
-	err := gc.rosCache.Add(domain)
+	err := gc.rosCache.Add(domain, timeout(domain))
 
 	if err != nil {
 		if err != addresslist.ErrAlreadyHaveSuchEntry {

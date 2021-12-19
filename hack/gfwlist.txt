@@ -1353,6 +1353,7 @@ dlive.tv
 dlsite.com
 dlyoutube.com
 dm530.net
+dmc.nico
 dmcdn.net
 dmhy.org
 dmm.co.jp
@@ -1521,7 +1522,6 @@ elpais.com
 eltondisney.com
 emaga.com
 emanna.com
-embr.in
 emilylau.org.hk
 empfil.com
 emule-ed2k.com
@@ -4296,6 +4296,7 @@ rukor.org
 rule34.xxx
 runbtx.com
 rushbee.com
+rusvpn.com
 ruten.com.tw
 rutube.ru
 ruyiseek.com
@@ -4647,7 +4648,6 @@ stat.gov.tw
 static-economist.com
 static.comico.tw
 static.shemalez.com
-static.techspot.com
 static01.nyt.com
 staticflickr.com
 statueofdemocracy.org
@@ -4821,6 +4821,7 @@ teachparentstech.org
 teamamericany.com
 tech2.in.com
 technews.tw
+techspot.com
 techviz.net
 teck.in
 teco-hk.org
@@ -4997,6 +4998,7 @@ tibettimes.net
 tibetwrites.org
 ticket.com.tw
 tigervpn.com
+tiktok.com
 tiltbrush.com
 timdir.com
 time.com
@@ -5264,6 +5266,7 @@ twyac.org
 txxx.com
 tycool.com
 typepad.com
+typora.io
 u15.info
 u9un.com
 ub0.cc

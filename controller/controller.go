@@ -58,6 +58,7 @@ func (gc *GFWCache) listenROSLog(stopCh <-chan struct{}, workers int, handler fu
 func (gc *GFWCache) handleROSLog(line string) {
 	domain := strings.Split(line, ":")[1]
 	domain = strings.TrimSpace(domain)
+	domain = strings.TrimSuffix(domain, ".")
 	if gfwlist.Has(domain) && !gc.rosCache.Has(domain) {
 		gc.queue.Add(domain)
 	}

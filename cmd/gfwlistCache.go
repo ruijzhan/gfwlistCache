@@ -11,10 +11,10 @@ import (
 func main() {
 	gc := controller.New(controller.FromParams())
 	chStop := make(chan struct{})
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	chSig := make(chan os.Signal, 1)
+	signal.Notify(chSig, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-c
+		<-chSig
 		close(chStop)
 	}()
 

@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+const (
+	listName = "gfwlist"
+)
+
 func TestNew(t *testing.T) {
 	type args struct {
 		apiAddr string
@@ -27,14 +31,14 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := New(tt.args.apiAddr, tt.args.user, tt.args.passwd)
+			l := New(tt.args.apiAddr, tt.args.user, tt.args.passwd, []string{""})
 			for !l.Synced() {
 				t.Log("Wait for sync...")
 				time.Sleep(time.Second)
 			}
-			t.Log(l.Has("www.google.com"))
-			t.Log(l.Has("www.youtube.com"))
-			err := l.Add("www.163.com", "1d")
+			t.Log(l.Has(listName, "www.google.com"))
+			t.Log(l.Has(listName, "www.youtube.com"))
+			err := l.Add(listName, "www.163.com", "1d")
 			if err != nil {
 				if err != ErrAlreadyHaveSuchEntry {
 					t.Fatal(err)

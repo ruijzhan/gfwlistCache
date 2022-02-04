@@ -11,20 +11,18 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const cacheName = "dns_cache"
-
 var (
 	ErrAlreadyHaveSuchEntry = errors.New("from RouterOS device: failure: already have such entry")
 )
 
 type AddressList interface {
 	Synced() bool
-	Has(string) bool
-	Add(string, string) error
+	Has(listName, domain string) bool
+	Add(listName string, domain string, timeout string) error
 	Stop()
 }
 
-func New(apiAddr, user, passwd string) AddressList {
+func New(apiAddr, user, passwd string, listNames []string) AddressList {
 	cli, err := routeros.Dial(apiAddr, user, passwd)
 	if err != nil {
 		panic(err)
@@ -32,7 +30,10 @@ func New(apiAddr, user, passwd string) AddressList {
 
 	l := &addressList{
 		cli:    cli,
-		cached: make(map[string]bool),
+		cached: make(map[string]map[string]bool),
+	}
+	for _, listName := range listNames {
+		l.cached[listName] = make(map[string]bool)
 	}
 
 	go l.sync()
@@ -44,7 +45,9 @@ func New(apiAddr, user, passwd string) AddressList {
 			if err != nil {
 				klog.Errorf("resync cache failed: %v", err)
 			} else {
-				klog.Infof("resynced cache: %d entries", len(l.cached))
+				for _, listName := range listNames {
+					klog.Infof("resynced cache: %s: %d entries", listName, len(l.cached[listName]))
+				}
 			}
 		}
 	}()
@@ -55,36 +58,51 @@ func New(apiAddr, user, passwd string) AddressList {
 type addressList struct {
 	cli    *routeros.Client
 	synced int32
-	cached map[string]bool
+	cached map[string]map[string]bool
 	mtx    sync.RWMutex
 }
 
 func (l *addressList) sync() {
-	list, err := addresslist.List(l.cli, addresslist.WithListName(cacheName))
-	if err != nil {
-		panic(err)
+	listNames := make([]string, 0, len(l.cached))
+	for k := range l.cached {
+		listNames = append(listNames, k)
 	}
 	l.mtx.Lock()
 	defer l.mtx.Unlock()
-	for _, e := range list {
-		l.cached[e.Address] = true
+	for _, listName := range listNames {
+		list, err := addresslist.List(l.cli, addresslist.WithListName(listName))
+		if err != nil {
+			panic(err)
+		}
+		for _, e := range list {
+			l.cached[listName][e.Address] = true
+		}
 	}
 	atomic.StoreInt32(&l.synced, 1)
-	klog.Infof("cache synced: %d entries", len(l.cached))
+	for _, listName := range listNames {
+		klog.Infof("cache synced: %s %d entries", listName, len(l.cached[listName]))
+	}
 }
 
 func (l *addressList) resync() error {
 	if !l.Synced() {
 		return nil
 	}
-	list, err := addresslist.List(l.cli, addresslist.WithListName(cacheName))
-	if err != nil {
-		return err
+	newCache := make(map[string]map[string]bool)
+	listNames := make([]string, 0, len(l.cached))
+	for k := range l.cached {
+		listNames = append(listNames, k)
 	}
+	for _, listName := range listNames {
+		list, err := addresslist.List(l.cli, addresslist.WithListName(listName))
+		if err != nil {
+			return err
+		}
+		newCache[listName] = make(map[string]bool)
 
-	newCache := make(map[string]bool, len(list))
-	for _, e := range list {
-		newCache[e.Address] = true
+		for _, e := range list {
+			newCache[listName][e.Address] = true
+		}
 	}
 
 	l.mtx.Lock()
@@ -97,20 +115,23 @@ func (l *addressList) Synced() bool {
 	return atomic.LoadInt32(&l.synced) == 1
 }
 
-func (l *addressList) Has(domain string) bool {
+func (l *addressList) Has(listName, domain string) bool {
 	l.mtx.RLock()
 	defer l.mtx.RUnlock()
-	return l.cached[domain]
+	return l.cached[listName][domain]
 }
 
-func (l *addressList) Add(domain, timeout string) error {
-	err := addresslist.Add(l.cli, cacheName, domain, timeout, "")
+func (l *addressList) Add(listName, domain, timeout string) error {
+	if l.Has(listName, domain) {
+		return ErrAlreadyHaveSuchEntry
+	}
 	l.mtx.Lock()
 	defer l.mtx.Unlock()
+	err := addresslist.Add(l.cli, listName, domain, timeout, "")
 	if err == nil {
-		l.cached[domain] = true
+		l.cached[listName][domain] = true
 	} else if err.Error() == ErrAlreadyHaveSuchEntry.Error() {
-		l.cached[domain] = true
+		l.cached[listName][domain] = true
 		return ErrAlreadyHaveSuchEntry
 	}
 	return err

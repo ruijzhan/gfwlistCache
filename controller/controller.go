@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"bufio"
+	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -15,15 +18,46 @@ type GFWCache struct {
 	rosCache  addresslist.AddressList
 	logServer logserver.LogServer
 	queue     workqueue.DelayingInterface
+	listSet   gfwlist.Interface
 }
 
 func New(conf *Config) *GFWCache {
 	gc := &GFWCache{
-		rosCache: addresslist.New(conf.RouterOSAddr, conf.RouterOSUser, conf.RouterOSPasswd),
 		logServer: logserver.New(conf.LogServerBindIP, conf.LogServerBindPort,
 			logserver.HasPrefix("dns,packet question"), logserver.HasSuffix(":A:IN"), logserver.NoDuplicate()),
-		queue: workqueue.NewDelayingQueue(),
+		queue:   workqueue.NewDelayingQueue(),
+		listSet: gfwlist.New(),
 	}
+
+	// 初始化字典树
+	lf, err := os.Open(conf.ListFile)
+	if err != nil {
+		panic(err)
+	}
+	defer lf.Close()
+	rder := bufio.NewReader(lf)
+	listNames := make(map[string]struct{})
+	for {
+		line, _, err := rder.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			panic(err)
+		}
+		tokens := strings.Split(string(line), " ")
+		listName, domain := tokens[0], tokens[1]
+		listNames[listName] = struct{}{}
+		gc.listSet.Insert(listName, domain)
+	}
+
+	//初始化 ros 缓存字典
+	keys := make([]string, 0, len(listNames))
+	for k := range listNames {
+		keys = append(keys, k)
+	}
+
+	gc.rosCache = addresslist.New(conf.RouterOSAddr, conf.RouterOSUser, conf.RouterOSPasswd, keys)
 
 	return gc
 }
@@ -59,9 +93,16 @@ func (gc *GFWCache) handleROSLog(line string) {
 	domain := strings.Split(line, ":")[1]
 	domain = strings.TrimSpace(domain)
 	domain = strings.TrimSuffix(domain, ".")
-	if gfwlist.Has(domain) && !gc.rosCache.Has(domain) {
-		gc.queue.Add(domain)
+
+	if lists := gc.listSet.ListsContain(domain); len(lists) > 0 {
+		for _, list := range lists {
+			gc.queue.Add(list + "$" + domain)
+		}
 	}
+
+	// if gfwlist.Has(domain) && !gc.rosCache.Has("listName", domain) {
+	// 	gc.queue.Add(domain)
+	// }
 }
 
 func (gc *GFWCache) runWorker() {
@@ -74,18 +115,20 @@ func (gc *GFWCache) worker() bool {
 	if stopped {
 		return false
 	}
-	domain := obj.(string)
-	err := gc.rosCache.Add(domain, timeout(domain))
+	listDomain := obj.(string)
+	tokens := strings.Split(listDomain, "$")
+	listName, domain := tokens[0], tokens[1]
+	err := gc.rosCache.Add(listName, domain, timeout(domain))
 
 	if err != nil {
 		if err != addresslist.ErrAlreadyHaveSuchEntry {
-			klog.Errorf("add %s error %v", domain, err)
-			gc.queue.AddAfter(domain, time.Second*5)
+			klog.Errorf("add %s to %s error %v", domain, listName, err)
+			gc.queue.AddAfter(obj, time.Second*5)
 			return true
 		}
 	} else {
-		klog.Infof("%s", domain)
+		klog.Infof("%s %s", listName, domain)
 	}
-	gc.queue.Done(domain)
+	gc.queue.Done(obj)
 	return true
 }
